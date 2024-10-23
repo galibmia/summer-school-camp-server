@@ -36,6 +36,13 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await usersCollection.findOne(query);
+      res.send(result);
+    });
+
     app.post("/users", async (req, res) => {
       try {
         const user = req.body;
@@ -50,6 +57,33 @@ async function run() {
         res.status(500).send({ error: "Failed to add user" });
       }
     });
+
+    // **Users API - Update User Profile**
+    app.put('/users/:id', async (req, res) => {
+      const id = req.params.id;
+      const updatedData = req.body;
+      
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ error: 'Invalid ID format' });
+    }
+
+    const query = { _id: new ObjectId(id) };
+    const updateDoc = {
+        $set: {
+            name: updatedData.name,
+            email: updatedData.email,
+            phoneNumber: updatedData.phoneNumber, 
+            address: updatedData.address,
+        },
+    };
+      try {
+        const result = await usersCollection.updateOne(query, updateDoc);
+        res.status(200).json(result);
+      } catch (error) {
+        res.status(500).json({ message: 'Server error', error });
+      }
+    });
+    
 
     // Instructors apis
     app.get("/instructors", async (req, res) => {
@@ -109,30 +143,34 @@ async function run() {
     // API to get purchases class
     app.get("/purchases/:email", async (req, res) => {
       const email = req.params.email;
-    
+
       try {
         const purchases = await purchasesCollection.find({ email }).toArray();
-    
+
         // Populate the class details for each purchase
-        const classIds = purchases.map((purchase) => new ObjectId(purchase.classId));
+        const classIds = purchases.map(
+          (purchase) => new ObjectId(purchase.classId)
+        );
         const bookedClasses = await classesCollection
           .find({ _id: { $in: classIds } })
           .toArray();
-    
+
         res.status(200).json(bookedClasses);
       } catch (error) {
         console.error("Error fetching purchases:", error);
         res.status(500).json({ message: "Server error" });
       }
     });
-    
+
     // API to delete a selected class
     app.delete("/purchases/:id", async (req, res) => {
       const purchaseId = req.params.id;
       console.log(purchaseId);
-    
+
       try {
-        const result = await purchasesCollection.deleteOne({ classId: new ObjectId(purchaseId) });
+        const result = await purchasesCollection.deleteOne({
+          classId: new ObjectId(purchaseId),
+        });
         if (result.deletedCount === 1) {
           console.log("success");
           res.status(200).json({ message: "Class removed successfully" });
@@ -145,41 +183,43 @@ async function run() {
         res.status(500).json({ message: "Server error" });
       }
     });
-    
+
     app.post("/purchase", async (req, res) => {
       const { classId, email } = req.body;
-    
+
       try {
         // Find the class by ID
         const classItem = await classesCollection.findOne({
           _id: new ObjectId(classId),
         });
-    
+
         if (!classItem) {
           return res.status(404).json({ message: "Class not found" });
         }
-    
+
         // Check if the user has already purchased the class
         const existingPurchase = await purchasesCollection.findOne({
           classId: new ObjectId(classId),
           email: email,
         });
-    
+
         if (existingPurchase) {
-          return res.status(400).json({ message: "You have already enrolled in this class." });
+          return res
+            .status(400)
+            .json({ message: "You have already enrolled in this class." });
         }
-    
+
         // Check if there are seats available
         if (classItem.studentsEnrolled >= classItem.totalSeats) {
           return res.status(400).json({ message: "No seats available" });
         }
-    
+
         // Update the studentsEnrolled count
         const updatedClass = await classesCollection.updateOne(
           { _id: new ObjectId(classId) },
           { $inc: { studentsEnrolled: 1 } }
         );
-    
+
         // Record the purchase in the database
         const newPurchase = {
           classId: new ObjectId(classId),
@@ -187,7 +227,7 @@ async function run() {
           purchaseDate: new Date(),
         };
         await purchasesCollection.insertOne(newPurchase);
-    
+
         res.status(200).json({
           message: "Purchase successful",
           success: true,
@@ -199,7 +239,6 @@ async function run() {
         res.status(500).json({ message: "Server error" });
       }
     });
-    
 
     // Get classes by instructor id
     app.get("/instructors/classes/:id", async (req, res) => {
