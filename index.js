@@ -23,12 +23,12 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
 
     const instructorsCollection = client.db("yogaDB").collection("instructors");
     const classesCollection = client.db("yogaDB").collection("classes");
     const usersCollection = client.db("yogaDB").collection("users");
-    const purchasesCollection = client.db("yogaDB").collection("purchases");
+    const cartItemCollection = client.db("yogaDB").collection("cartItem");
 
     // Users api
     app.get("/users", async (req, res) => {
@@ -135,17 +135,17 @@ async function run() {
 
     // Cart API
 
-    app.get("/purchases", async (req, res) => {
-      const result = await purchasesCollection.find().toArray();
+    app.get("/cartItems", async (req, res) => {
+      const result = await cartItemCollection.find().toArray();
       res.send(result);
     });
 
     // API to get purchases class
-    app.get("/purchases/:email", async (req, res) => {
+    app.get("/cartItems/:email", async (req, res) => {
       const email = req.params.email;
 
       try {
-        const purchases = await purchasesCollection.find({ email }).toArray();
+        const purchases = await cartItemCollection.find({ email }).toArray();
 
         // Populate the class details for each purchase
         const classIds = purchases.map(
@@ -163,12 +163,12 @@ async function run() {
     });
 
     // API to delete a selected class
-    app.delete("/purchases/:id", async (req, res) => {
+    app.delete("/cartItems/:id", async (req, res) => {
       const purchaseId = req.params.id;
       console.log(purchaseId);
 
       try {
-        const result = await purchasesCollection.deleteOne({
+        const result = await cartItemCollection.deleteOne({
           classId: new ObjectId(purchaseId),
         });
         if (result.deletedCount === 1) {
@@ -184,7 +184,7 @@ async function run() {
       }
     });
 
-    app.post("/purchase", async (req, res) => {
+    app.post("/cartItem", async (req, res) => {
       const { classId, email } = req.body;
 
       try {
@@ -198,41 +198,32 @@ async function run() {
         }
 
         // Check if the user has already purchased the class
-        const existingPurchase = await purchasesCollection.findOne({
+        const existingItem = await cartItemCollection.findOne({
           classId: new ObjectId(classId),
           email: email,
         });
 
-        if (existingPurchase) {
+        if (existingItem) {
           return res
             .status(400)
             .json({ message: "You have already enrolled in this class." });
         }
 
-        // Check if there are seats available
-        if (classItem.studentsEnrolled >= classItem.totalSeats) {
-          return res.status(400).json({ message: "No seats available" });
-        }
-
-        // Update the studentsEnrolled count
-        const updatedClass = await classesCollection.updateOne(
-          { _id: new ObjectId(classId) },
-          { $inc: { studentsEnrolled: 1 } }
-        );
+        // // Check if there are seats available
+        // if (classItem.studentsEnrolled >= classItem.totalSeats) {
+        //   return res.status(400).json({ message: "No seats available" });
+        // }
 
         // Record the purchase in the database
         const newPurchase = {
           classId: new ObjectId(classId),
           email: email,
-          purchaseDate: new Date(),
         };
-        await purchasesCollection.insertOne(newPurchase);
+        await cartItemCollection.insertOne(newPurchase);
 
         res.status(200).json({
           message: "Purchase successful",
           success: true,
-          studentsEnrolled: classItem.studentsEnrolled + 1,
-          totalSeats: classItem.totalSeats,
         });
       } catch (error) {
         console.error("Error during purchase:", error);
@@ -267,7 +258,7 @@ async function run() {
     });
 
     // Send ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Successfully connected to MongoDB!");
   } finally {
   }
